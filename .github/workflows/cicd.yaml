@@ -1,0 +1,150 @@
+name: CICD Pipeline
+
+on: push
+
+jobs:
+  model-deployment:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run pipeline
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1  # Replace with your AWS region
+        run: |
+          dvc repro
+
+      - name: Push DVC-tracked data to remote
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1  # Replace with your AWS region
+        run: |
+          dvc push
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add changes to Git
+        run: |
+          git add .
+
+      - name: Commit changes
+        if: ${{ github.actor != 'github-actions[bot]' }}
+        run: |
+          git commit -m "Automated commit of DVC outputs and updated code" || echo "No changes to commit"
+
+      - name: Push changes
+        if: ${{ github.actor != 'github-actions[bot]' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push origin ${{ github.ref_name }}
+
+      - name: Install test dependencies
+        run: |
+          pip install pytest
+
+      - name: Run model loading test
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          pytest scripts/test_load_model.py
+
+      - name: Run model signature test
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          pytest scripts/test_model_signature.py
+
+      - name: Run model performance test
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          pytest scripts/test_model_performance.py
+
+      - name: Promote model to production
+        if: success()
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: python scripts/promote_model.py
+
+      
+      - name: Login to AWS ECR
+        if: success()
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 390844758498.dkr.ecr.us-east-1.amazonaws.com
+
+      - name: Build Docker image
+        if: success()
+        run: |
+          docker build -t yt-chrome-plugin .
+
+      - name: Tag Docker image
+        if: success()
+        run: |
+          docker tag yt-chrome-plugin:latest 390844758498.dkr.ecr.us-east-1.amazonaws.com/yt-chrome-plugin:latest
+
+      - name: Push Docker image to AWS ECR
+        if: success()
+        run: |
+          docker push 390844758498.dkr.ecr.us-east-1.amazonaws.com/yt-chrome-plugin:latest
+
+      # Zip the required files
+      - name: Zip files for deployment
+        if: success()
+        run: |
+          zip -r deployment.zip appspec.yml deploy/scripts/install_dependencies.sh deploy/scripts/start_docker.sh
+
+      # Upload the ZIP file to S3
+      - name: Upload ZIP to S3
+        if: success()
+        run: |
+          aws s3 cp deployment.zip s3://campusxcodedeploybucket/deployment.zip
+
+      # Deploy to AWS CodeDeploy using the uploaded ZIP file
+      - name: Deploy to AWS CodeDeploy
+        if: success()
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws deploy create-deployment \
+            --application-name YTChromePlugin \
+            --deployment-config-name CodeDeployDefault.OneAtATime \
+            --deployment-group-name YTChromePluginDeploymentGroup \
+            --s3-location bucket=campusxcodedeploybucket,key=deployment.zip,bundleType=zip \
+            --file-exists-behavior OVERWRITE \
+            --region us-east-1
