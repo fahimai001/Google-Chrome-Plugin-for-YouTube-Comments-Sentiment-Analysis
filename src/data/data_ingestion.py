@@ -5,7 +5,6 @@ from sklearn.model_selection import train_test_split
 import yaml
 import logging
 
-# Logging configuration
 logger = logging.getLogger('data_ingestion')
 logger.setLevel(logging.DEBUG)
 
@@ -55,11 +54,8 @@ def load_data(data_url: str) -> pd.DataFrame:
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     """Preprocess the data by handling missing values, duplicates, and empty strings."""
     try:
-        # Removing missing values
         df.dropna(inplace=True)
-        # Removing duplicates
         df.drop_duplicates(inplace=True)
-        # Removing rows with empty strings
         df = df[df['clean_comment'].str.strip() != '']
         
         logger.debug('Data preprocessing completed: Missing values, duplicates, and empty strings removed.')
@@ -76,10 +72,8 @@ def save_data(train_data: pd.DataFrame, test_data: pd.DataFrame, data_path: str)
     try:
         raw_data_path = os.path.join(data_path, 'raw')
         
-        # Create the data/raw directory if it does not exist
         os.makedirs(raw_data_path, exist_ok=True)
         
-        # Save the train and test data
         train_data.to_csv(os.path.join(raw_data_path, "train.csv"), index=False)
         test_data.to_csv(os.path.join(raw_data_path, "test.csv"), index=False)
         
@@ -90,14 +84,11 @@ def save_data(train_data: pd.DataFrame, test_data: pd.DataFrame, data_path: str)
 
 def main():
     try:
-        # Load parameters from the params.yaml in the root directory
         params = load_params(params_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../params.yaml'))
         test_size = params['data_ingestion']['test_size']
         
-        # Load data from the specified URL
         df = load_data(data_url='https://raw.githubusercontent.com/Himanshu-1703/reddit-sentiment-analysis/refs/heads/main/data/reddit.csv')
-        
-        # Preprocess the data
+       
         final_df = preprocess_data(df)
         
         # Split the data into training and testing sets
