@@ -1,5 +1,3 @@
-# src/data/data_preprocessing.py
-
 import numpy as np
 import pandas as pd
 import os
@@ -10,7 +8,6 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 import logging
 
-# logging configuration
 logger = logging.getLogger('data_preprocessing')
 logger.setLevel('DEBUG')
 
@@ -27,18 +24,14 @@ file_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
-# Download required NLTK data
 nltk.download('wordnet')
 nltk.download('stopwords')
 
-# Define the preprocessing function
 def preprocess_comment(comment):
     """Apply preprocessing transformations to a comment."""
     try:
-        # Convert to lowercase
         comment = comment.lower()
 
-        # Remove trailing and leading whitespaces
         comment = comment.strip()
 
         # Remove newline characters
