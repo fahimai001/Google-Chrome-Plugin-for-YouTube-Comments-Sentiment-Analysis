@@ -34,17 +34,13 @@ def preprocess_comment(comment):
 
         comment = comment.strip()
 
-        # Remove newline characters
         comment = re.sub(r'\n', ' ', comment)
 
-        # Remove non-alphanumeric characters, except punctuation
         comment = re.sub(r'[^A-Za-z0-9\s!?.,]', '', comment)
 
-        # Remove stopwords but retain important ones for sentiment analysis
         stop_words = set(stopwords.words('english')) - {'not', 'but', 'however', 'no', 'yet'}
         comment = ' '.join([word for word in comment.split() if word not in stop_words])
 
-        # Lemmatize the words
         lemmatizer = WordNetLemmatizer()
         comment = ' '.join([lemmatizer.lemmatize(word) for word in comment.split()])
 
@@ -69,7 +65,7 @@ def save_data(train_data: pd.DataFrame, test_data: pd.DataFrame, data_path: str)
         interim_data_path = os.path.join(data_path, 'interim')
         logger.debug(f"Creating directory {interim_data_path}")
         
-        os.makedirs(interim_data_path, exist_ok=True)  # Ensure the directory is created
+        os.makedirs(interim_data_path, exist_ok=True) 
         logger.debug(f"Directory {interim_data_path} created or already exists")
 
         train_data.to_csv(os.path.join(interim_data_path, "train_processed.csv"), index=False)
@@ -83,17 +79,14 @@ def save_data(train_data: pd.DataFrame, test_data: pd.DataFrame, data_path: str)
 def main():
     try:
         logger.debug("Starting data preprocessing...")
-        
-        # Fetch the data from data/raw
+     
         train_data = pd.read_csv('./data/raw/train.csv')
         test_data = pd.read_csv('./data/raw/test.csv')
         logger.debug('Data loaded successfully')
 
-        # Preprocess the data
         train_processed_data = normalize_text(train_data)
         test_processed_data = normalize_text(test_data)
 
-        # Save the processed data
         save_data(train_processed_data, test_processed_data, data_path='./data')
     except Exception as e:
         logger.error('Failed to complete the data preprocessing process: %s', e)
